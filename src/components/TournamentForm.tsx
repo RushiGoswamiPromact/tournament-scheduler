@@ -9,14 +9,29 @@ import { Tournament, Player, Match } from '../types';
 const TournamentForm: React.FC = () => {
   const [tournament, setTournament] = useState<Tournament>(() => {
     const saved = localStorage.getItem('tournament');
-    return saved ? JSON.parse(saved) : {
+    const defaultInitialState: Tournament = {
       playerCount: 4,
       playTwice: false,
       players: [],
       matches: [],
       matchesPerDay: 2,
-      startDate: new Date().toISOString().split('T')[0]
+      startDate: new Date().toISOString().split('T')[0],
+      weekType: 'normal',
+      selectedDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+      isFullWeek: true
     };
+    if (saved) {
+      try {
+        const parsedSaved = JSON.parse(saved);
+        // Merge parsed state with defaults to ensure all keys are present
+        return { ...defaultInitialState, ...parsedSaved };
+      } catch (error) {
+        console.error("Failed to parse tournament data from localStorage", error);
+        // Fallback to default state if parsing fails or data is corrupt
+        return defaultInitialState;
+      }
+    }
+    return defaultInitialState;
   });
   
   const [step, setStep] = useState<'setup' | 'players' | 'schedule' | 'order'>(() => {
@@ -62,9 +77,77 @@ const TournamentForm: React.FC = () => {
     }));
   };
 
+  const handleWeekTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newWeekType = e.target.value as 'normal' | 'workweek' | 'weekend';
+    let newSelectedDays: string[] = [...tournament.selectedDays];
+    let newIsFullWeek = tournament.isFullWeek;
+
+    if (newWeekType === 'workweek') {
+      newSelectedDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+      newIsFullWeek = true;
+    } else if (newWeekType === 'weekend') {
+      newSelectedDays = ['Saturday', 'Sunday'];
+      newIsFullWeek = true;
+    } else {
+      if (tournament.isFullWeek) {
+        newSelectedDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+      }
+    }
+    setTournament(prev => ({
+      ...prev,
+      weekType: newWeekType,
+      selectedDays: newSelectedDays,
+      isFullWeek: newIsFullWeek,
+    }));
+  };
+
+  const handleIsFullWeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = e.target.checked;
+    let newSelectedDays = [...tournament.selectedDays];
+    if (checked) {
+      if (tournament.weekType === 'normal') {
+        newSelectedDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+      } else if (tournament.weekType === 'workweek') {
+        newSelectedDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+      }
+    }
+    setTournament(prev => ({
+      ...prev,
+      isFullWeek: checked,
+      selectedDays: newSelectedDays
+    }));
+  };
+  
+  const allWeekDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+  const handleSelectedDaysChange = (day: string) => {
+    const newSelectedDays = tournament.selectedDays.includes(day)
+      ? tournament.selectedDays.filter(d => d !== day)
+      : [...tournament.selectedDays, day];
+    
+    let newIsFullWeek = tournament.isFullWeek;
+    if (tournament.weekType === 'normal' && newSelectedDays.length < 7) {
+        newIsFullWeek = false;
+    } else if (tournament.weekType === 'workweek' && (newSelectedDays.length < 5 || !['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'].every(d => newSelectedDays.includes(d))) ) {
+        newIsFullWeek = false;
+    }
+
+    setTournament(prev => ({
+      ...prev,
+      selectedDays: newSelectedDays,
+      isFullWeek: newIsFullWeek,
+    }));
+  };
+
   const handlePlayerNamesSubmit = (players: Player[]) => {
     const matches = generateRoundRobinMatches(players, tournament.playTwice);
-    const matchesWithDates = assignMatchDates(matches, tournament.startDate!, tournament.matchesPerDay);
+    const matchesWithDates = assignMatchDates(
+        matches, 
+        tournament.startDate!, 
+        tournament.matchesPerDay,
+        tournament.weekType,
+        tournament.selectedDays,
+    );
     
     setTournament(prev => ({
       ...prev,
@@ -75,7 +158,13 @@ const TournamentForm: React.FC = () => {
   };
 
   const handleMatchesReorder = (newMatches: Match[]) => {
-    const updatedMatches = assignMatchDates(newMatches, tournament.startDate!, tournament.matchesPerDay);
+    const updatedMatches = assignMatchDates(
+        newMatches, 
+        tournament.startDate!, 
+        tournament.matchesPerDay,
+        tournament.weekType,
+        tournament.selectedDays,
+    );
     setTournament(prev => ({
       ...prev,
       matches: updatedMatches
@@ -90,7 +179,10 @@ const TournamentForm: React.FC = () => {
         players: [],
         matches: [],
         matchesPerDay: 2,
-        startDate: new Date().toISOString().split('T')[0]
+        startDate: new Date().toISOString().split('T')[0],
+        weekType: 'normal',
+        selectedDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+        isFullWeek: true
       });
       setStep('setup');
     }
@@ -188,6 +280,65 @@ const TournamentForm: React.FC = () => {
                 Double round-robin (each player plays against all others twice)
               </label>
             </div>
+            
+            <div>
+              <label htmlFor="weekType" className="block text-sm font-medium text-gray-700 mb-1">
+                Week Type for Scheduling
+              </label>
+              <select
+                id="weekType"
+                value={tournament.weekType}
+                onChange={handleWeekTypeChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="normal">Normal Week (Customize days)</option>
+                <option value="workweek">Work Week (Mon-Fri)</option>
+                <option value="weekend">Weekend (Sat-Sun)</option>
+              </select>
+            </div>
+
+            {(tournament.weekType === 'normal' || tournament.weekType === 'workweek') && (
+              <div className="space-y-3 mt-4 p-4 border border-gray-200 rounded-md">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="isFullWeek"
+                    checked={tournament.isFullWeek}
+                    onChange={handleIsFullWeekChange}
+                    disabled={tournament.weekType === 'weekend'}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="isFullWeek" className="ml-2 block text-sm text-gray-700">
+                    {tournament.weekType === 'normal' ? 'Full Week (All 7 days)' : 'Full Work Week (Mon-Fri)'}
+                  </label>
+                </div>
+                
+                {!tournament.isFullWeek && (tournament.weekType === 'normal' || tournament.weekType === 'workweek') && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Select Days:</label>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                      {allWeekDays.map(day => {
+                        if (tournament.weekType === 'workweek' && !['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'].includes(day)) {
+                          return null;
+                        }
+                        return (
+                          <div key={day} className="flex items-center">
+                            <input
+                              type="checkbox"
+                              id={`day-${day}`}
+                              checked={tournament.selectedDays.includes(day)}
+                              onChange={() => handleSelectedDaysChange(day)}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                            />
+                            <label htmlFor={`day-${day}`} className="ml-2 text-sm text-gray-700">{day}</label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             
             <div className="flex justify-end">
               <button

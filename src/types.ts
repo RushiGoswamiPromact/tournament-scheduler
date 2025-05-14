@@ -17,4 +17,7 @@ export interface Tournament {
   matches: Match[];
   startDate?: string; // ISO date string
   matchesPerDay: number;
+  weekType: 'normal' | 'workweek' | 'weekend';
+  selectedDays: string[]; // e.g., ["Monday", "Tuesday"]
+  isFullWeek: boolean;
 }

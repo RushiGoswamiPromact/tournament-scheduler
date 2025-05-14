@@ -1,5 +1,16 @@
 import { Player, Match } from '../types';
 
+// Helper function to get the day name (e.g., "Monday") from a Date object
+const getDayName = (date: Date): string => {
+  return date.toLocaleDateString('en-US', { weekday: 'long' });
+};
+
+// Helper function to check if a day is playable based on selected days
+const isPlayableDay = (date: Date, selectedDays: string[]): boolean => {
+  const dayName = getDayName(date);
+  return selectedDays.includes(dayName);
+};
+
 export const generateRoundRobinMatches = (players: Player[], playTwice: boolean): Match[] => {
   const matches: Match[] = [];
   const playerCount = players.length;
@@ -56,15 +67,36 @@ export const generateRoundRobinMatches = (players: Player[], playTwice: boolean)
   return matches;
 };
 
-export const assignMatchDates = (matches: Match[], startDate: string, matchesPerDay: number): Match[] => {
+export const assignMatchDates = (
+  matches: Match[], 
+  startDate: string, 
+  matchesPerDay: number,
+  _weekType: 'normal' | 'workweek' | 'weekend',
+  selectedDays: string[]
+): Match[] => {
   const sortedMatches = [...matches];
-  let currentDate = new Date(startDate);
+  const currentDate = new Date(startDate);
   let matchesOnCurrentDate = 0;
 
+  // Adjust start date to the first playable day
+  while (!isPlayableDay(currentDate, selectedDays)) {
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
   return sortedMatches.map(match => {
+    // Ensure the current date is a playable day before assigning
+    while (!isPlayableDay(currentDate, selectedDays)) {
+      currentDate.setDate(currentDate.getDate() + 1);
+      matchesOnCurrentDate = 0; // Reset for the new valid day
+    }
+
     if (matchesOnCurrentDate >= matchesPerDay) {
-      currentDate = new Date(currentDate.setDate(currentDate.getDate() + 1));
+      currentDate.setDate(currentDate.getDate() + 1);
       matchesOnCurrentDate = 0;
+      // Ensure the next day is also a playable day
+      while (!isPlayableDay(currentDate, selectedDays)) {
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
     }
 
     matchesOnCurrentDate++;
