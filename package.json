@@ -2,7 +2,7 @@
   "name": "vite-react-typescript-starter",
   "private": true,
   "version": "0.0.0",
-  "homepage": "https://rushigoswamipromact.github.io/tournament-schedular",
+  "homepage": "https://rushigoswamipromact.github.io/tournament-scheduler",
   "type": "module",
   "scripts": {
     "dev": "vite",
